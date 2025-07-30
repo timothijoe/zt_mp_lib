@@ -1,0 +1,17 @@
+# 忽略 data 文件夹及其所有内容
+data/
+log/
+avp_utils/collision_checker/
+avp_utils/img_element/
+avp_utils/minimal_back
+# Python 缓存文件
+*.py[cod]
+**/__pycache__/
+**/history/
+*.egg-info/
+
+# 忽略 IDE 和编辑器生成的文件
+.vscode/
+.idea/
+*.swp
+*.swo
