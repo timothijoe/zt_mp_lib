@@ -133,11 +133,13 @@ def lane_state_sampling_one_case(final_theta_degree, dd =20, show_animation = Tr
     k0 = 0.0
     #l_center = 0.1 * final_theta_degree #2.4
     l_center = 0.04 * final_theta_degree #2.4
+    l_center = 0.05 * final_theta_degree #2.4
     # l_center = 0.04 * final_theta_degree #2.4
     l_heading = np.deg2rad(final_theta_degree)
-    l_width = 15.0#5.0
+    l_width = 10.0#5.0 + 2.0
+    l_width = 12.0#5.0 + 2.0
     v_width = 1.0
-    d = dd
+    d = dd - 1
     nxy = 25#15
     states = calc_lane_states(l_center, l_heading, l_width, v_width, d, nxy)
     result = generate_path(states, k0)
@@ -167,7 +169,9 @@ def lane_state_sampling_one_case(final_theta_degree, dd =20, show_animation = Tr
 
         x_new_c = np.array(x_new_c)
         y_new_c = np.array(y_new_c)
-        dist_threshold = 22
+        dist_threshold = 22 - 6 
+        if (np.abs(final_theta_degree) > 30):
+            dist_threshold += 3
         refine_x_list = []
         refine_y_list = []
         refine_x_list.append(x_new_c[0])
@@ -213,7 +217,7 @@ def main():
     degree_list = [-60, -50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50, 60]
     degree_list = [-60, -50, -40, -30, -25 -20, -15, -10, -5, 0,5, 10, 15, 20, 25, 30, 40, 50, 60]
     # degree_list = [-40, -30, -25 -20, -15, -10, -5, 0,5, 10, 15, 20, 25, 30, 40]
-    dd = 20 #20， 16， 12
+    dd = 16 #20， 16， 12
     path_dictionary = {}
     
     for degree in degree_list:

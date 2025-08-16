@@ -20,7 +20,7 @@ import ModelPredictiveTrajectoryGenerator.motion_model as motion_model
 max_iter = 100
 h: np.ndarray = np.array([0.5, 0.02, 0.02]).T  # parameter sampling distance
 cost_th = 0.1
-cost_th = 0.05
+cost_th = 0.06
 show_animation = True
 
 
