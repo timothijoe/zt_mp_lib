@@ -57,13 +57,11 @@ def get_files_from_folder(folder_path):
 CURRENT_FILE_PATH = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_FILE_PATH)
 
-IMAGE_EXAMPLE_FOLDER = BASE_DIR + '/avp_utils/png_example'
-IMAGE_IMAGE_ELEMENT_FOLDER = BASE_DIR + '/avp_utils/img_element'
-
 ROOT_DATA_FOLDER = BASE_DIR + '/data'
+
+
+
 DATA_SET_FOLDER = ROOT_DATA_FOLDER + '/dataset'
 DATA_RAW_FOLDER = ROOT_DATA_FOLDER + '/raw_data'
 DATA_VISUAL_FOLDER = ROOT_DATA_FOLDER + '/visual_data'
-CAR_IMAGE_PATH = BASE_DIR + '/avp_utils/img_element/car.png'
-CAR_IMAGE_PATH_RB= BASE_DIR + '/avp_utils/img_element/car_img_v2-removebg-preview.png'
 
