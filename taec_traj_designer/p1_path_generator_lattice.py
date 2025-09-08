@@ -269,11 +269,11 @@ def main():
         print('zt1')
         save_pickle(pkl_name, path_dictionary)
     print('zt2')
-    import pickle 
-    pkl_name = 'jan11_path_turn10m.pickle'
-    pkl_name = LATTICE_LIBRARY_PATH + pkl_name 
-    with open(pkl_name, "wb") as fp:
-        pickle.dump(path_dictionary, fp)
+    # import pickle 
+    # pkl_name = 'jan11_path_turn10m.pickle'
+    # pkl_name = LATTICE_LIBRARY_PATH + pkl_name 
+    # with open(pkl_name, "wb") as fp:
+    #     pickle.dump(path_dictionary, fp)
 
 
 if __name__ == '__main__':

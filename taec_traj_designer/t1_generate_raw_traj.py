@@ -149,6 +149,8 @@ if mode == 'save':
                     vel = MetaVel(vel_cluster.vel_cluster_dict[vel_id])
                     if(vel.total_dist > path.total_path_len):
                         print('zt')
+                        print(vel.total_dist)
+                        print(path.total_path_len)
                         continue 
                     else:
                         Ros = np.zeros((1,5))

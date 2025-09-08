@@ -19,7 +19,7 @@ print(CIRCLE_LIBRARY_PATH)
 mode = 'draw' 
 mode = 'save'
 
-scaleMul = 0.75
+scaleMul = 0.5
 
 
 def generate_from_control(v_0 = 1.0, w_0 = 0, duration = 30, dt = 0.1, save=False):
@@ -171,6 +171,8 @@ def save_multi_control():
         r = -i * 1.0
         w = v / r 
         path = generate_from_control(1.0, w, save=True)
+        path_dictionary[str(path_id)] = copy.deepcopy(path)
+        path_id += 1
     for i in range(20, 40):
         r = -i * 0.5
         w = v / r 
