@@ -58,6 +58,7 @@ def track_trajectories(trajectories, output_folder, filename):
         traj2_library[library_key]['label'] = 'label'
         traj2_library[library_key]['traj_type'] = 1
         traj2_library[library_key]['traj_weight'] = traj_weight 
+        traj2_library[library_key]['trajectory'] = trajectory_ele['raw_trajectory']
         traj2_library[library_key]['raw_trajectory'] = trajectory_ele['raw_trajectory']
         traj2_library[library_key]['track_trajectory'] = trajectory_ele['track_trajectory']
         traj2_library[library_key]['track_action'] = trajectory_ele['track_action']
