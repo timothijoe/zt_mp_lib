@@ -39,8 +39,11 @@ def track_trajectories(trajectories, output_folder, filename):
         output_folder (str): 保存图像的文件夹路径。
         filename (str): 当前文件的名字，用于命名输出图像。
     """
-    plt.figure()
+    # plt.figure()
+    trajectory_list = {}
     for i, trajectory in enumerate(trajectories):
+        trajectory_ele = {}
+        trajectory_ele['raw_trajectory'] = trajectory 
         if trajectory.shape[1] < 2:
             print(f"Skipping trajectory {i+1} in {filename}: insufficient dimensions.")
             continue
@@ -50,14 +53,14 @@ def track_trajectories(trajectories, output_folder, filename):
         cspeed = trajectory[:, 3]
         ctime = trajectory[:, 4]
         
-        plt.plot(cx, cy, color='red', label=f"Trajectory {i+1}")
+        # plt.plot(cx, cy, color='red', label=f"Trajectory {i+1}")
    
-        plt.grid()
-        plt.axis("equal")  # 保持 x 和 y 轴比例一致     
-        ax = plt.gca()
-        ax.set_xlim(0, 15)
-        ax.set_ylim(-7.5, 7.5)
-        # plt.xlim([0, 15])  # 设置 x
+        # plt.grid()
+        # plt.axis("equal")  # 保持 x 和 y 轴比例一致     
+        # ax = plt.gca()
+        # ax.set_xlim(0, 15)
+        # ax.set_ylim(-7.5, 7.5)
+        # # plt.xlim([0, 15])  # 设置 x
         
         initial_state = State(x=cx[0], y=cy[0], yaw=cyaw[0], v=cspeed[0])
         state = initial_state
@@ -82,9 +85,7 @@ def track_trajectories(trajectories, output_folder, filename):
         time = 0.0
         MAX_TIME = 3.0
         odelta, oa = None, None
-
         cyaw = smooth_yaw(cyaw)
-
 
         zt = 1
         while MAX_TIME >= time:
@@ -92,19 +93,14 @@ def track_trajectories(trajectories, output_folder, filename):
             xref, target_ind, dref = calc_ref_trajectory(
                 state, cx, cy, cyaw, ck, sp, dl, target_ind)
             zt += 1
-
             x0 = [state.x, state.y, state.v, state.yaw]  # current state
-
             oa, odelta, ox, oy, oyaw, ov = iterative_linear_mpc_control(
                 xref, x0, dref, oa, odelta)
-
             di, ai = 0.0, 0.0
             if odelta is not None:
                 di, ai = odelta[0], oa[0]
                 state = update_state(state, ai, di)
-
             time = time + DT
-
             x.append(state.x)
             y.append(state.y)
             yaw.append(state.yaw)
@@ -112,15 +108,26 @@ def track_trajectories(trajectories, output_folder, filename):
             t.append(time)
             d.append(di)
             a.append(ai)
-        plt.plot(x, y, color='green', label=f"Trajectory {i+1}")
+        
+        #track_trajectory = np.array([x, y, yaw, v, t]).T 
+        track_trajectory = np.column_stack([x, y, yaw, v, t])
+        #track_action = np.array([a, d])
+        track_action = np.column_stack([a, d])
+        trajectory_ele['track_trajectory'] = track_trajectory 
+        trajectory_ele['track_action'] = track_action 
+        trajectory_list[i] = trajectory_ele
+        
+        #plt.plot(x, y, color='green', label=f"Trajectory {i+1}")
         
     # print('zt')
     # # plt.plot(x, y, color='green', label=f"Trajectory {i+1}")
     # plt.show()
     image_name = os.path.splitext(filename)[0] + ".png"
-    output_path = os.path.join(output_folder, image_name)
-    plt.savefig(output_path)
-    plt.close()
+    pkl_name = os.path.splitext(filename)[0] + ".pkl"
+    output_path = os.path.join(output_folder, pkl_name)
+    save_pickle(output_path, trajectory_list)
+    # plt.savefig(output_path)
+    # plt.close()
     print(f"Saved plot to {output_path}")      
         
 
