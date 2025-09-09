@@ -8,6 +8,8 @@ from taec_utils.dir_utils import save_pickle, load_pickle, ensure_directory_exis
 from taec_utils.mpc_utils import iterative_linear_mpc_control, calc_nearest_index, State, MAX_TIME, calc_ref_trajectory, update_state, DT, smooth_yaw
 import math
 TRAJ_LIBRARY_PATH = DATA_RAW_FOLDER + '/traj/'
+MPC_LIBRARY_PATH =  DATA_RAW_FOLDER + '/mpc_track_traj/'
+ensure_directory_exists(MPC_LIBRARY_PATH)
 
 def load_pickle_files(folder_path):
     """
@@ -39,7 +41,6 @@ def track_trajectories(trajectories, output_folder, filename):
         output_folder (str): 保存图像的文件夹路径。
         filename (str): 当前文件的名字，用于命名输出图像。
     """
-    # plt.figure()
     trajectory_list = {}
     for i, trajectory in enumerate(trajectories):
         trajectory_ele = {}
@@ -52,15 +53,6 @@ def track_trajectories(trajectories, output_folder, filename):
         cyaw = trajectory[:, 2]
         cspeed = trajectory[:, 3]
         ctime = trajectory[:, 4]
-        
-        # plt.plot(cx, cy, color='red', label=f"Trajectory {i+1}")
-   
-        # plt.grid()
-        # plt.axis("equal")  # 保持 x 和 y 轴比例一致     
-        # ax = plt.gca()
-        # ax.set_xlim(0, 15)
-        # ax.set_ylim(-7.5, 7.5)
-        # # plt.xlim([0, 15])  # 设置 x
         
         initial_state = State(x=cx[0], y=cy[0], yaw=cyaw[0], v=cspeed[0])
         state = initial_state
@@ -78,7 +70,7 @@ def track_trajectories(trajectories, output_folder, filename):
         a = [0.0]
 
         target_ind, _ = calc_nearest_index(state, cx, cy, cyaw, 0)
-        print(target_ind)
+        print(i)
         ck = None 
         sp = cspeed 
         dl = 1.0
@@ -116,18 +108,10 @@ def track_trajectories(trajectories, output_folder, filename):
         trajectory_ele['track_trajectory'] = track_trajectory 
         trajectory_ele['track_action'] = track_action 
         trajectory_list[i] = trajectory_ele
-        
-        #plt.plot(x, y, color='green', label=f"Trajectory {i+1}")
-        
-    # print('zt')
-    # # plt.plot(x, y, color='green', label=f"Trajectory {i+1}")
-    # plt.show()
     image_name = os.path.splitext(filename)[0] + ".png"
     pkl_name = os.path.splitext(filename)[0] + ".pkl"
     output_path = os.path.join(output_folder, pkl_name)
     save_pickle(output_path, trajectory_list)
-    # plt.savefig(output_path)
-    # plt.close()
     print(f"Saved plot to {output_path}")      
         
 
@@ -135,33 +119,24 @@ def track_trajectories(trajectories, output_folder, filename):
 
 def main():
     # 用户输入文件夹路径
-    #folder_path = input("Please enter the folder path containing pickle files: ").strip()
-    folder_path = '/home/zhoutong/dir_sda/betty/zt_mp_lib/data/raw_data/traj_png2/'
-    input_path = '/home/zhoutong/dir_sda/betty/zt_mp_lib/data/raw_data/traj/'
-    #input_path = '/home/zhoutong/dir_sda/betty/zt_mp_lib/data/raw_data/path/circle_path/'
-    # 检查文件夹是否存在
+    folder_path = MPC_LIBRARY_PATH
+    input_path = TRAJ_LIBRARY_PATH
     if not os.path.exists(folder_path):
         print(f"Error: The folder '{folder_path}' does not exist.")
         return
-
-    # 加载轨迹数据
     print("Loading pickle files...")
     trajectories_dict = load_pickle_files(input_path)
-
     if not trajectories_dict:
         print("No valid pickle files found in the folder.")
         return
-
     # 创建输出文件夹
     output_folder = os.path.join(folder_path, "output_plots")
     output_folder = folder_path
     os.makedirs(output_folder, exist_ok=True)
-
     # 为每个文件绘制轨迹图
     for filename, trajectories in trajectories_dict.items():
         print(f"Plotting trajectories from {filename}...")
         track_trajectories(trajectories, output_folder, filename)
-
     print("All plots have been saved.")
 
 
