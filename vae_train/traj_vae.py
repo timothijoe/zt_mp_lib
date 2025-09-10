@@ -77,8 +77,9 @@ class VaeEncoder(nn.Module):
         self.dt = dt
         self.device = torch.device('cuda:0')
 
+        self.init_traj_ele_embedding()
         # input: x, y, theta, v,   output: embedding
-        self.spatial_embedding = nn.Linear(2, self.embedding_dim)
+        self.spatial_embedding = nn.Linear(2, self.embedding_dim) # relative position
 
         enc_mid_dims = [self.h_dim, self.h_dim, self.h_dim, self.latent_dim]
         mu_modules = []
@@ -86,21 +87,36 @@ class VaeEncoder(nn.Module):
         in_channels = self.h_dim
         for m_dim in enc_mid_dims:
             mu_modules.append(
-                nn.Sequential(
-                    nn.Linear(in_channels, m_dim),
-                    #nn.BatchNorm2d(h_dim),
-                    nn.LeakyReLU())
+                nn.Sequential(nn.Linear(in_channels, m_dim),nn.LeakyReLU())
             )
             sigma_modules.append(
-                nn.Sequential(
-                    nn.Linear(in_channels, m_dim),
-                    #nn.BatchNorm2d(h_dim),
-                    nn.LeakyReLU())
+                nn.Sequential(nn.Linear(in_channels, m_dim),nn.LeakyReLU())
             )
             in_channels = m_dim  
         self.mean = nn.Sequential(*mu_modules) 
         self.log_var = nn.Sequential(*sigma_modules)
         self.encoder = nn.LSTM(self.embedding_dim + self.label_dim, self.h_dim, self.num_layers)
+        
+    def init_traj_ele_embedding(self):
+        # input: x, y, theta, v,   output: embedding
+        self.rel_spatial_embedding = nn.Linear(2, self.embedding_dim) # relative position
+        self.abs_spatial_embedding = nn.Linear(3, self.embedding_dim) # relative position
+        self.control_embedding = nn.Linear(2, self.embedding_dim) # relative position
+        # self.end_pose_embedding = nn.Linear(3, self.embedding_dim) # relative position
+        
+        end_pose_dims = [self.h_dim, self.h_dim, self.h_dim, self.h_dim]
+        end_pose_embed_modules = []
+        in_channels = 3 # 3 for end pose element x, y, theta
+        for m_dim in end_pose_dims:
+            end_pose_embed_modules.append(
+                nn.Sequential(nn.Linear(in_channels, m_dim), nn.LeakyReLU())
+            )
+            in_channels = m_dim 
+        self.end_pose_embedding = nn.Sequential(*end_pose_embed_modules) 
+        self.rel_spatial_encoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
+        self.abs_spatial_encoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
+        self.control_encoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
+        self.combine_embedding = nn.Linear(self.h_dim * 4, self.h_dim)
 
     def init_hidden(self, batch_size):
         return (
@@ -117,27 +133,36 @@ class VaeEncoder(nn.Module):
         # rel_traj shape: batch_size x seq_len x 4
         return rel_traj
     
-    def encode(self, input, traj_label):
-        # input meaning: a trajectory len 25 and contains x, y , theta, v
-        # input shape: batch x seq_len x 4
-        #data_traj shape: seq_len x batch x 4
-        if self.use_relative_pos:
-            input = self.get_relative_position(input)
-            input = input[:,:,:2]
-        traj_label_onehot = one_hot(traj_label.long(),num=2).unsqueeze(0)
-        traj_label_onehot = traj_label_onehot.repeat(self.seq_len, 1, 1)
+    def embed_traj_seq_element(self, input, emb_net, encode_net):
         data_traj = input.permute(1, 0, 2).contiguous()
-        traj_embedding = self.spatial_embedding(data_traj.view(-1, 2))
-        # traj_embedding = traj_embedding.view(self.seq_len, -1, self.embedding_dim)
+        traj_embedding = emb_net(data_traj.view(-1, data_traj.shape[2]))
         traj_embedding = traj_embedding.view(self.encoding_len, -1, self.embedding_dim)
         traj_embedding = traj_embedding[:self.seq_len]
-        # Here we do not specify batch_size to self.batch_size because when testing maybe batch will vary
         batch_size = traj_embedding.shape[1]
         hidden_tuple = self.init_hidden(batch_size)
-        traj_embedding = torch.cat([traj_label_onehot, traj_embedding], 2)
-        output, encoder_h = self.encoder(traj_embedding, hidden_tuple)
-        mu = self.mean(encoder_h[0])
-        log_var = self.log_var(encoder_h[0])
+        output, encoder_h = encode_net(traj_embedding, hidden_tuple)
+        return encoder_h[0]
+    
+    def encode(self, input, traj_label):
+        # input meaning: a trajectory len 25 and contains x, y , theta, v; a, steer
+        # input shape: batch x seq_len x 4
+        if self.use_relative_pos:
+            rel_pose_seq = self.get_relative_position(input)
+            rel_pose_seq = rel_pose_seq[:,:,:2]
+        abs_pose_seq = input[:, :, :3]
+        control_seq = input[:, :, 4:]
+        end_pose = input[:, -1, :3]
+        
+        rel_pose_seq_embd = self.embed_traj_seq_element(rel_pose_seq, self.rel_spatial_embedding, self.rel_spatial_encoder)
+        abs_pose_seq_embd = self.embed_traj_seq_element(abs_pose_seq, self.abs_spatial_embedding, self.abs_spatial_encoder)
+        
+        control_seq_embd = self.embed_traj_seq_element(control_seq, self.control_embedding, self.control_encoder)
+        end_pose_embd = self.end_pose_embedding(end_pose).unsqueeze(0)
+        combined_embd = torch.cat([rel_pose_seq_embd, abs_pose_seq_embd, control_seq_embd, end_pose_embd], 2)
+        combined_embd = self.combine_embedding(combined_embd)
+
+        mu = self.mean(combined_embd)
+        log_var = self.log_var(combined_embd)
         #mu, log_var = torch.tanh(mu), torch.tanh(log_var)
         return mu, log_var
 

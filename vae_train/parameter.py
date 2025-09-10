@@ -76,7 +76,7 @@ class hyper_parameter(object):
         # self.model_name = 'Naive_Model'
         # self.load_model_name = 'Naive_Model'
 
-        self.exp_name = 'zt_jan13_014'
+        self.exp_name = 'zt_jan13_015'
         self.test = True
 
         self.embedding_dim = 64
