@@ -216,32 +216,6 @@ class VaeDecoder(nn.Module):
             in_channels = m_dim  
         self.label_classification = nn.Sequential(*label_modules) 
 
-    def plant_model_batch_former(self, prev_state_batch, pedal_batch, steering_batch, dt = 0.03):
-        #import copy
-        prev_state = prev_state_batch
-        x_t = prev_state[:,0]
-        y_t = prev_state[:,1]
-        psi_t = prev_state[:,2]
-        v_t = prev_state[:,3]
-        #pedal_batch = torch.clamp(pedal_batch, -5, 5)
-        steering_batch = torch.clamp(steering_batch, -0.6, 0.6)
-        beta = steering_batch
-        a_t = pedal_batch
-        v_t_1 = v_t + a_t * dt 
-        v_t_1 = torch.clamp(v_t_1, 0, 10)
-        psi_dot = v_t * torch.tan(beta) / 2.5
-        psi_dot = torch.clamp(psi_dot, -3.14 /2,3.14 /2)
-        psi_t_1 = psi_dot*dt + psi_t 
-        x_dot = v_t_1 * torch.cos(psi_t_1)
-        y_dot = v_t_1 * torch.sin(psi_t_1)
-        x_t_1 = x_dot * dt + x_t 
-        y_t_1 = y_dot * dt + y_t
-        
-        #psi_t = self.wrap_angle_rad(psi_t)
-        current_state = torch.stack([x_t_1, y_t_1, psi_t_1, v_t_1], dim = 1)
-        #current_state = torch.FloatTensor([x_t, y_t, psi_t, v_t_1])
-        return current_state
-
     def clip_by_tensor(self, t, t_min, t_max):
         t = t.float()
         t_min = t_min.float()
@@ -250,7 +224,7 @@ class VaeDecoder(nn.Module):
         result = (result <= t_max).float() * result + (result > t_max).float() * t_max 
         return result 
 
-    def plant_model_batch(self, prev_state_batch, pedal_batch, steering_batch, dt = 0.03, last_st = None, st_rate_constrain=0.5):
+    def plant_model_batch(self, prev_state_batch, pedal_batch, steering_batch, dt = 0.1, last_st = None, st_rate_constrain=0.5):
         #import copy
         prev_state = prev_state_batch
         x_t = prev_state[:,0]
@@ -286,6 +260,7 @@ class VaeDecoder(nn.Module):
 
     def decode(self, z, init_state):
         generated_traj = []
+        control_traj = []
         prev_state = init_state[:,:4]
         # decoder_input shape: batch_size x 4
         decoder_input = self.spatial_embedding(prev_state)
@@ -300,14 +275,18 @@ class VaeDecoder(nn.Module):
             # output shape: 1 x batch x h_dim
             output, decoder_h = self.decoder(decoder_input, decoder_h)
             control = self.hidden2control(output.view(-1, self.h_dim))
-            #last_st = None
-            curr_state, steering_batch = self.plant_model_batch(prev_state, control[:,0], control[:,1], self.dt, last_st, 0.4)
+            acc_control = torch.zeros_like(control[:,1])
+            last_st = None
+            curr_state, steering_batch = self.plant_model_batch(prev_state, acc_control, control[:,1], self.dt, last_st, 0.4)
             generated_traj.append(curr_state)
+            control_traj.append(control)
             decoder_input = self.spatial_embedding(curr_state)
             decoder_input = decoder_input.view(1, -1, self.embedding_dim)
             prev_state = curr_state 
             last_st = steering_batch
         generated_traj = torch.stack(generated_traj, dim = 1)
+        control_traj = torch.stack(control_traj, dim = 1)
+        generated_traj = torch.cat([generated_traj, control_traj], dim=2)
         return generated_traj
 
     def forward(self, z, init_state):
@@ -364,8 +343,8 @@ class TrajVAE(nn.Module):
     
     def forward(self, expert_traj, init_state, traj_label = None):
         mu, log_var = self.vae_encoder(expert_traj, traj_label)
-        # z = self.reparameterize(mu, log_var)
-        z = mu
+        z = self.reparameterize(mu, log_var)
+        #z = mu
         z = torch.tanh(z)
         # z = z / 2
         # recons_traj, recons_traj_len10, output_label = self.vae_decoder(z, init_state)
@@ -420,16 +399,16 @@ class TrajVAE(nn.Module):
         final_displacement_error = F.mse_loss(recons[:,-1, :2]* traj_mask[:,-1, :2], input[:, -1, :2]*traj_mask[:, -1, :2])
         # final_displacement_error += F.mse_loss(recons_len10[:,-1, :2]* traj_mask_0[:,-1, :2], input[:, 9, :2]*traj_mask_0[:, -1, :2])
         
-        theta_error = F.mse_loss(recons[:,:,2]*traj_mask[:,:,2], input[:,:,2] *traj_mask[:,:,2]) * 30.0 # 0.5
+        theta_error = F.mse_loss(recons[:,:,5]*traj_mask[:,:,2], input[:,:,5] *traj_mask[:,:,2]) * 30.0 # 0.5
         # theta_error += F.mse_loss(recons_len10[:,:,2]*traj_mask_0[:,:,2], input[:,:10,2] * np.pi / 180*traj_mask_0[:,:,2]) * 1.0 # 0.5
 
         final_theta_error = 0.0
-        final_theta_error = F.mse_loss(recons[:,-1,2] *traj_mask[:,-1,2], input[:,-1,2]*traj_mask[:,-1,2])  * 100
+        final_theta_error = F.mse_loss(recons[:,-1,2] *traj_mask[:,-1,2], input[:,-1,2]*traj_mask[:,-1,2])  * 10
         # final_theta_error += F.mse_loss(recons_len10[:,-1,2] *traj_mask_0[:,-1,2], input[:,10,2]*traj_mask_0[:,-1,2] * np.pi / 180) * 40
         kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
         #kld_weight = 0.1
-        loss = recons_loss  + self.kld_weight * kld_loss + self.fde_weight * final_displacement_error + theta_error  + vel_loss + final_theta_error 
-
+        #loss = recons_loss  + self.kld_weight * kld_loss + self.fde_weight * final_displacement_error + theta_error  + vel_loss + final_theta_error 
+        loss = recons_loss  + self.kld_weight * kld_loss + theta_error
         # print('kld_weight: {}'.format(kld_weight))
         # print('epoch: {} '.format(epoch))
         #print('final displace error: {}'.format(final_displacement_error))
