@@ -235,6 +235,8 @@ def generate_compact_traj(traj_len20, init_state, traj_len=10, trajj_type=None):
     #traj = traj[:4, :, :]
     init_state = init_state[:4, :]
     batch_size = traj.shape[0]
+    init_state = init_state[:, :4]
+    traj = traj[:, :, :4]
     traj = torch.cat([init_state.unsqueeze(1), traj], dim = 1).to('cpu')
     time = torch.arange(0,total_traj_len) / 10
     time = time.squeeze(0).repeat(batch_size, 1)

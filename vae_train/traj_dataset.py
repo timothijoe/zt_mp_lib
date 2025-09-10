@@ -53,7 +53,11 @@ class trajDataset(Dataset):
                 traj_library[str(library_key)]['traj_type'] = value['traj_type']
                 traj_library[str(library_key)]['traj_mask_0'] = value['traj_weight'].transpose(1,0)
                 traj_library[str(library_key)]['traj_mask_1'] = value['traj_weight'].transpose(1,0)
-                traj_library[str(library_key)]['trajectory'] = value['trajectory'].transpose(1,0)
+                traj_library[str(library_key)]['raw_trajectory'] = value['raw_trajectory']
+                traj_library[str(library_key)]['track_trajectory'] = value['track_trajectory']
+                traj_library[str(library_key)]['track_action'] = value['track_action']
+                traj_library[str(library_key)]['trajectory'] = np.concatenate((value['track_trajectory'], value['track_action']), axis = 1)
+                # 0-4: x, y, theta, v, t,   5-6: acc, steer
                 # traj_library[str(library_key)] = value['trajectory'].transpose(1, 0)
 
         # mode 'full' returns all trajectories
@@ -85,11 +89,9 @@ class trajDataset(Dataset):
     def __getitem__(self, idx):
         # self.extraced_data.shape = 5, 11,
         # x, y, theta, v, time
-        return self.extraced_data[str(idx)]['trajectory'][0,[0,1,2,3]], self.extraced_data[str(idx)]['trajectory'][1:,[0,1,2,3]], \
+        return self.extraced_data[str(idx)]['trajectory'][0,[0,1,2,3,5,6]], self.extraced_data[str(idx)]['trajectory'][1:,[0,1,2,3,5,6]], \
             self.extraced_data[str(idx)]['traj_type'],self.extraced_data[str(idx)]['traj_mask_0'][:,[0,1,2,3]], \
             self.extraced_data[str(idx)]['traj_mask_1'][:,[0,1,2,3]]
-        #return self.extraced_data[str(idx)][0,[0,1,2,3]], self.extraced_data[str(idx)][1:,[0,1,2,3]]
-        ###return self.extraced_data[str(idx)][[0,1,2,3], 0], self.extraced_data[str(idx)][[0,1,2,3], 1:]
 
 
 def load_data(params):
