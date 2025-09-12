@@ -76,7 +76,7 @@ class hyper_parameter(object):
         # self.model_name = 'Naive_Model'
         # self.load_model_name = 'Naive_Model'
 
-        self.exp_name = 'zt_jan13_016'
+        self.exp_name = 'zt_jan13_018'
         self.test = True
 
         self.embedding_dim = 64
@@ -87,7 +87,7 @@ class hyper_parameter(object):
         self.seq_len =  30 #20 # 20 # 30
         self.dt = 0.1
         self.use_relative_pos = True
-        self.kld_weight = 0.01 #10  #20.0 # 0.01, 0.4
+        self.kld_weight = 20 #10  #20.0 # 0.01, 0.4
         self.fde_weight = 1.5
         self.cum_theta_weight = 1
         self.one_side_class_vae = False  

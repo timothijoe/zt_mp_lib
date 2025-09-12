@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import matplotlib.gridspec as gridspec
 from tensorboardX import SummaryWriter
-from vis_helper import save_traj_to_img, generate_compact_traj
+from vis_helper import save_traj_to_img, generate_compact_traj, save_trajs_to_img_batch
 import os 
 def save_model(model):
     # model_PATH = "result/{}/model/model_{}.pt".format(params.model_name, (epoch+params.restore_epoch))
@@ -113,8 +113,8 @@ def train_vae(model, train_loader, val_loader, params):
                 current_epoch = epoch
                 for k, v in ret.items():
                     tb_logger.add_scalar("train_epoch/{}".format(k), v.item(), epoch)
-                img_to_tensorboard = save_traj_to_img(name, expers, recons)
-                tb_logger.add_image('train_epoch/train_recon_comprare', img_to_tensorboard, epoch, dataformats='HWC')
+                img_to_tensorboard = save_trajs_to_img_batch(name, expers, recons)
+                #tb_logger.add_image('train_epoch/train_recon_comprare', img_to_tensorboard, epoch, dataformats='HWC')
             iter_num += 1
         if epoch > 0 and epoch % params.val_freq == 0:
             model.eval()

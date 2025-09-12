@@ -75,8 +75,8 @@ class trajDataset(Dataset):
         else:
             validation_library_raw = copy.deepcopy(traj_library)
             validation_library = {}
-            for key in training_keys:
-                validation_library_raw.pop(key)
+            # for key in training_keys:
+            #     validation_library_raw.pop(key)
             for key in validation_library_raw.keys():
                 validation_key = len(validation_library)
                 validation_library[str(validation_key)] = validation_library_raw[key]            
