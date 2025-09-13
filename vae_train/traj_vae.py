@@ -70,7 +70,7 @@ class VaeEncoder(nn.Module):
         self.embedding_dim = embedding_dim
         self.label_dim = 2
         self.h_dim = h_dim 
-        self.num_layers = 1
+        self.num_layers = 2
         self.latent_dim = latent_dim
         self.seq_len = seq_len 
         self.use_relative_pos = use_relative_pos
@@ -81,22 +81,27 @@ class VaeEncoder(nn.Module):
         # input: x, y, theta, v,   output: embedding
         self.spatial_embedding = nn.Linear(2, self.embedding_dim) # relative position
 
-        enc_mid_dims = [self.h_dim, self.h_dim, self.h_dim, self.latent_dim]
+        enc_mid_dims = [self.h_dim, self.h_dim, self.h_dim]
         mu_modules = []
         sigma_modules = []
         in_channels = self.h_dim
         for m_dim in enc_mid_dims:
             mu_modules.append(
-                nn.Sequential(nn.Linear(in_channels, m_dim),nn.LeakyReLU())
+                nn.Sequential(nn.Linear(in_channels, m_dim), nn.LayerNorm(m_dim), nn.LeakyReLU())
             )
             sigma_modules.append(
-                nn.Sequential(nn.Linear(in_channels, m_dim),nn.LeakyReLU())
+                nn.Sequential(nn.Linear(in_channels, m_dim), nn.LayerNorm(m_dim), nn.LeakyReLU())
             )
             in_channels = m_dim  
+        mu_modules.append(nn.Linear(self.h_dim, self.latent_dim))
+        sigma_modules.append(nn.Linear(self.h_dim, self.latent_dim))
         self.mean = nn.Sequential(*mu_modules) 
         self.log_var = nn.Sequential(*sigma_modules)
         self.encoder = nn.LSTM(self.embedding_dim + self.label_dim, self.h_dim, self.num_layers)
-        
+        # nn.init.zeros_(self.mean.weight)  # 初始化权重为 0
+        # nn.init.zeros_(self.mean.bias)    # 初始化偏置为 0
+        # nn.init.constant_(self.log_var.weight, -0.01)  # 初始化权重为接近负值
+        # nn.init.constant_(self.log_var.bias, -0.01)   # 初始化偏置为接近负值
     def init_traj_ele_embedding(self):
         # input: x, y, theta, v,   output: embedding
         self.rel_spatial_embedding = nn.Linear(2, self.embedding_dim) # relative position
@@ -117,6 +122,7 @@ class VaeEncoder(nn.Module):
         self.abs_spatial_encoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
         self.control_encoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
         self.combine_embedding = nn.Linear(self.h_dim * 4, self.h_dim)
+        self.layer_reduce = nn.Linear(self.num_layers * self.h_dim, self.h_dim)
 
     def init_hidden(self, batch_size):
         return (
@@ -141,7 +147,10 @@ class VaeEncoder(nn.Module):
         batch_size = traj_embedding.shape[1]
         hidden_tuple = self.init_hidden(batch_size)
         output, encoder_h = encode_net(traj_embedding, hidden_tuple)
-        return encoder_h[0]
+        concat_hidden_state = encoder_h[0].permute(1, 0, 2).reshape(batch_size, -1) # shape: (batch_size, layer_num * h_dim)
+        reduced_hidden_state = self.layer_reduce(concat_hidden_state)
+        #return encoder_h[0]
+        return reduced_hidden_state
     
     def encode(self, input, traj_label):
         # input meaning: a trajectory len 25 and contains x, y , theta, v; a, steer
@@ -157,8 +166,9 @@ class VaeEncoder(nn.Module):
         abs_pose_seq_embd = self.embed_traj_seq_element(abs_pose_seq, self.abs_spatial_embedding, self.abs_spatial_encoder)
         
         control_seq_embd = self.embed_traj_seq_element(control_seq, self.control_embedding, self.control_encoder)
-        end_pose_embd = self.end_pose_embedding(end_pose).unsqueeze(0)
-        combined_embd = torch.cat([rel_pose_seq_embd, abs_pose_seq_embd, control_seq_embd, end_pose_embd], 2)
+        # end_pose_embd = self.end_pose_embedding(end_pose).unsqueeze(0)
+        end_pose_embd = self.end_pose_embedding(end_pose)
+        combined_embd = torch.cat([rel_pose_seq_embd, abs_pose_seq_embd, control_seq_embd, end_pose_embd], 1)
         combined_embd = self.combine_embedding(combined_embd)
 
         mu = self.mean(combined_embd)
@@ -183,24 +193,38 @@ class VaeDecoder(nn.Module):
         super(VaeDecoder, self).__init__()
         self.embedding_dim = embedding_dim
         self.h_dim = h_dim 
-        self.num_layers = 1
+        self.num_layers = 2
         self.latent_dim = latent_dim
         self.label_dim = 1
         self.seq_len = seq_len 
         self.use_relative_pos = use_relative_pos
         self.dt = dt
         # input: x, y, theta, v,   output: embedding
-        self.spatial_embedding = nn.Linear(4, self.embedding_dim)
+        #self.spatial_embedding = nn.Linear(4, self.embedding_dim)
+        self.spatial_embedding = nn.Sequential(
+            nn.Linear(4, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.Linear(128, embedding_dim),
+            nn.ReLU()
+        )
+        
         # input: h_dim, output: throttle, steer
-        self.hidden2control = nn.Linear(self.h_dim, 2)
+        #self.hidden2control = nn.Linear(self.h_dim, 2)
+        self.hidden2control = nn.Sequential(
+            nn.Linear(self.h_dim, 128),  # 双向 LSTM 输出是 2 * h_dim
+            nn.ReLU(),
+            nn.Linear(128, 2)
+        )
+        
         self.decoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
         # self.decoder_len10 = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
         #self.init_hidden_decoder = torch.nn.Linear(in_features = self.latent_dim, out_features = self.h_dim * self.num_layers)
         self.one_side_class_vae = one_side_class_vae
-        if self.one_side_class_vae:
-            self.init_hidden_decoder = torch.nn.Linear(in_features = self.latent_dim - 1, out_features = self.h_dim * self.num_layers)
-        else: 
-            self.init_hidden_decoder = torch.nn.Linear(in_features = self.latent_dim, out_features = self.h_dim * self.num_layers)
+        # if self.one_side_class_vae:
+        #     self.init_hidden_decoder = torch.nn.Linear(in_features = self.latent_dim - 1, out_features = self.h_dim * self.num_layers)
+        # else: 
+        self.init_hidden_decoder_embed = torch.nn.Linear(in_features = self.latent_dim, out_features = self.h_dim * self.num_layers)
         
         label_dims = [self.h_dim, self.h_dim, self.h_dim, self.label_dim]
         label_modules = []
@@ -223,6 +247,14 @@ class VaeDecoder(nn.Module):
         result = (t > t_min).float() * t + (t < t_min).float() * t_min 
         result = (result <= t_max).float() * result + (result > t_max).float() * t_max 
         return result 
+    
+    def init_hidden_decoder(self, latent_state):
+        batch_size = latent_state.shape[0]
+        latent_embed = self.init_hidden_decoder_embed(latent_state)
+        decoder_h_projected = latent_embed.view(batch_size, self.num_layers, self.h_dim)  # shape: (batch_size, layer_num, h_dim)
+        # 调整维度为 (layer_num, batch_size, h_dim)
+        decoder_h_expanded = decoder_h_projected.permute(1, 0, 2) 
+        return decoder_h_expanded.contiguous()
 
     def plant_model_batch(self, prev_state_batch, pedal_batch, steering_batch, dt = 0.1, last_st = None, st_rate_constrain=0.5):
         #import copy
@@ -266,9 +298,9 @@ class VaeDecoder(nn.Module):
         decoder_input = self.spatial_embedding(prev_state)
         decoder_input = decoder_input.view(1, -1 , self.embedding_dim)
         decoder_h = self.init_hidden_decoder(z)
-        if len(decoder_h.shape) == 2:
-            decoder_h = torch.unsqueeze(decoder_h, 0)
-            #decoder_h.unsqueeze(0)
+        # if len(decoder_h.shape) == 2:
+        #     decoder_h = torch.unsqueeze(decoder_h, 0)
+        #     #decoder_h.unsqueeze(0)
         decoder_h = (decoder_h, decoder_h)
         last_st = None
         for _ in range(self.seq_len):
@@ -337,7 +369,7 @@ class TrajVAE(nn.Module):
         # mu shape: batch size x latent_dim
         # sigma shape: batch_size x latent_dim
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
+        eps = torch.randn_like(std) * 0.1
         return eps * std + mu
         #return mu
     
@@ -408,7 +440,7 @@ class TrajVAE(nn.Module):
         kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
         #kld_weight = 0.1
         #loss = recons_loss  + self.kld_weight * kld_loss + self.fde_weight * final_displacement_error + theta_error  + vel_loss + final_theta_error 
-        loss = recons_loss  + self.kld_weight * kld_loss + theta_error
+        loss = self.kld_weight * kld_loss + theta_error
         # print('kld_weight: {}'.format(kld_weight))
         # print('epoch: {} '.format(epoch))
         #print('final displace error: {}'.format(final_displacement_error))
