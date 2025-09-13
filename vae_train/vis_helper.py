@@ -38,7 +38,7 @@ def save_trajs_to_img_batch(args, origin_traj_lst, generate_traj_lst):
         file_folder = 'result/{}/img_folder'.format(args[2])
         if not os.path.exists(file_folder):
             os.makedirs(file_folder)
-        file_path = file_folder + '/img_batch_{}.png'.format(str(i))
+        file_path = file_folder + '/img_epoch_{}_batch_idx_{}_fig_{}.png'.format(args[3], args[4], str(i))
         save_traj_to_img(args, cur_origin_traj_lst, cur_generate_traj_lst, file_path)
     # origin_traj_lst = origin_traj_lst[:12]
     # generate_traj_lst = generate_traj_lst[:12]

@@ -81,8 +81,8 @@ def train_vae(model, train_loader, val_loader, params):
     optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
     iter_num = 0
     current_epoch = -1
-
-    for epoch in range(params.n_epochs):
+    train_epoch_item = {}
+    for epoch in range(params.n_epochs + 1):
         model.train()
         decs = 'Train - epoch-{}'.format(epoch)
         #for train_init, train_traj in tqdm(train_loader, desc = 'Train'):
@@ -97,50 +97,73 @@ def train_vae(model, train_loader, val_loader, params):
             recons = generate_compact_traj(ret[0], train_init, params.seq_len, trajj_type = traj_type)
             expers = generate_compact_traj(ret[1], train_init, params.seq_len, trajj_type = None)
             name = ['train_expert', 'reconstruct', exp_name, str(epoch)]
-            fake_epoch = iter_num // 50
-            
-            # ret = model.loss_function(*ret, traj_mask, traj_mask_0)
+
             ret = model.loss_function(*ret, traj_mask, traj_mask_0)
             loss = ret['loss']
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if iter_num % 50 == 0:
-                for k, v in ret.items():
-                    tb_logger.add_scalar("train_iter/{}".format(k), v.item(), iter_num)
+            for k, v in ret.items():
+                v_record = v.item() if isinstance(v, torch.Tensor) else v 
+                tb_logger.add_scalar("A_train_iter/{}".format(k), v_record, iter_num)
+                if k not in train_epoch_item.keys():
+                    train_epoch_item[k] = v_record 
+                else:
+                    train_epoch_item[k] += v_record 
+            iter_num += 1   
+        for k, v in train_epoch_item.items():
+            v_record = v / len(train_loader)
+            tb_logger.add_scalar("B_train_epoch/{}".format(k), v_record, epoch)
 
-            if epoch != current_epoch:
-                current_epoch = epoch
+            # if epoch != current_epoch:
+            #     current_epoch = epoch
+            #     for k, v in ret.items():
+            #         tb_logger.add_scalar("train_epoch/{}".format(k), v.item(), epoch)
+            #     img_to_tensorboard = save_trajs_to_img_batch(name, expers, recons)
+            #     #tb_logger.add_image('train_epoch/train_recon_comprare', img_to_tensorboard, epoch, dataformats='HWC')
+            # iter_num += 1
+        # if epoch > 0 and epoch % params.val_freq == 0:
+        if epoch % params.val_freq != 0:
+            continue 
+        # starting evaluate
+        model.eval()
+        eval_batch_index = 0
+        eval_epoch_item = {}
+        for val_init, val_traj, traj_type, traj_mask_0, traj_mask in tqdm(val_loader, desc = 'Val  '):
+            with torch.no_grad():
+                val_init = val_init.float().to(params.device)
+                val_traj = val_traj.float().to(params.device)
+                traj_mask = traj_mask.float().to(params.device)
+                traj_mask_0 = traj_mask_0.float().to(params.device)
+                traj_type = traj_type.float().to(params.device)
+                ret = model.forward(val_traj, val_init, traj_type)
+                
+                recons = generate_compact_traj(ret[0], train_init, params.seq_len, trajj_type = traj_type)
+                expers = generate_compact_traj(ret[1], train_init, params.seq_len, trajj_type = None)
+                ret = model.loss_function(*ret, traj_mask, traj_mask_0)
+                name = ['train_expert', 'reconstruct', exp_name, str(epoch), str(eval_batch_index)]
+                
                 for k, v in ret.items():
-                    tb_logger.add_scalar("train_epoch/{}".format(k), v.item(), epoch)
-                img_to_tensorboard = save_trajs_to_img_batch(name, expers, recons)
-                #tb_logger.add_image('train_epoch/train_recon_comprare', img_to_tensorboard, epoch, dataformats='HWC')
-            iter_num += 1
-        if epoch > 0 and epoch % params.val_freq == 0:
-            model.eval()
-            total_loss = {}
-            for val_init, val_traj, traj_type, traj_mask_0, traj_mask in tqdm(val_loader, desc = 'Val  '):
-                with torch.no_grad():
-                    val_init = val_init.float().to(params.device)
-                    val_traj = val_traj.float().to(params.device)
-                    traj_mask = traj_mask.float().to(params.device)
-                    traj_mask_0 = traj_mask_0.float().to(params.device)
-                    traj_type = traj_type.float().to(params.device)
-                    ret = model.forward(train_traj, train_init, traj_type)
-                    #ret = model.forward(val_traj, val_init)
-                    loss = model.loss_function(*ret, traj_mask, traj_mask_0)
-                    for k, v in loss.items():
-                        if k not in total_loss:
-                            total_loss[k] = [v]
-                        else:
-                            total_loss[k].append(v)
-            total_loss_mean = {k: torch.stack(v).mean().item() for k, v in total_loss.items()}
-            for k, v in total_loss_mean.items():
-                tb_logger.add_scalar("val_epoch/{}_avg".format(k), v, epoch)
-            state_dict = model.state_dict()
-            torch.save(state_dict, "result/{}/ckpt/{}_ckpt".format(exp_name, epoch))   
-            torch.save(model.vae_decoder.state_dict(), "result/{}/ckpt/{}_decoder_ckpt".format(exp_name, epoch))  
-            torch.save(model.vae_encoder.state_dict(), "result/{}/ckpt/{}_encoder_ckpt".format(exp_name, epoch))    
+                    v_record = v.item() if isinstance(v, torch.Tensor) else v 
+                    tb_logger.add_scalar("C_eval_iter/{}".format(k), v_record, iter_num)
+                    if k not in eval_epoch_item.keys():
+                        eval_epoch_item[k] = v_record 
+                    else:
+                        eval_epoch_item[k] += v_record 
+                eval_batch_index += 1 
+                if epoch % params.val_save_fig == 0 and epoch > 0:
+                    save_trajs_to_img_batch(name, expers, recons)
+        for k, v in eval_epoch_item.items():
+            v_record = v / len(val_loader)
+            tb_logger.add_scalar("D_eval_epoch/{}".format(k), v_record, epoch)
+                    
+                    
+        if (epoch % params.val_save_ckpt != 0) or (epoch == 0):
+            continue 
+        state_dict = model.state_dict()
+        torch.save(state_dict, "result/{}/ckpt/{}_ckpt".format(exp_name, epoch))   
+        torch.save(model.vae_decoder.state_dict(), "result/{}/ckpt/{}_decoder_ckpt".format(exp_name, epoch))  
+        torch.save(model.vae_encoder.state_dict(), "result/{}/ckpt/{}_encoder_ckpt".format(exp_name, epoch))    
 
 
 

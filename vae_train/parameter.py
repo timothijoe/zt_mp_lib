@@ -76,18 +76,18 @@ class hyper_parameter(object):
         # self.model_name = 'Naive_Model'
         # self.load_model_name = 'Naive_Model'
 
-        self.exp_name = 'zt_jan13_018'
+        self.exp_name = 'zt_jan13_020'
         self.test = True
 
         self.embedding_dim = 64
-        self.h_dim = 64
+        self.h_dim = 128 #64
         self.latent_dim = 5
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = 64
         self.seq_len =  30 #20 # 20 # 30
         self.dt = 0.1
         self.use_relative_pos = True
-        self.kld_weight = 20 #10  #20.0 # 0.01, 0.4
+        self.kld_weight = 0.1 #10  #20.0 # 0.01, 0.4
         self.fde_weight = 1.5
         self.cum_theta_weight = 1
         self.one_side_class_vae = False  
@@ -95,3 +95,5 @@ class hyper_parameter(object):
 
 
         self.val_freq = 1
+        self.val_save_fig = 10
+        self.val_save_ckpt = 10

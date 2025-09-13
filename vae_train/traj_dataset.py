@@ -105,5 +105,6 @@ def load_train_eval(params, test = True):
     train_dataset= trajDataset(data_mode = 'full', test=test)
     validation_dataset = trajDataset(data_mode = 'validation', test=test)
     train_loader = torch.utils.data.DataLoader(dataset= train_dataset, batch_size = params.batch_size, drop_last=True, shuffle = True, pin_memory=True, num_workers=0)
-    validation_loader = torch.utils.data.DataLoader(dataset= validation_dataset, batch_size = params.batch_size, drop_last=True, shuffle = True, pin_memory=True, num_workers=0)
+    #validation_loader = torch.utils.data.DataLoader(dataset= validation_dataset, batch_size = params.batch_size, drop_last=True, shuffle = True, pin_memory=True, num_workers=0)
+    validation_loader = torch.utils.data.DataLoader(dataset= validation_dataset, batch_size = params.batch_size, drop_last=True, shuffle = False, pin_memory=True, num_workers=0)
     return train_dataset, validation_dataset, train_loader, validation_loader
