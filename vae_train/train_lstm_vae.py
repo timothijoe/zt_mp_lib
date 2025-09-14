@@ -81,8 +81,8 @@ def train_vae(model, train_loader, val_loader, params):
     optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
     iter_num = 0
     current_epoch = -1
-    train_epoch_item = {}
     for epoch in range(params.n_epochs + 1):
+        train_epoch_item = {}
         model.train()
         decs = 'Train - epoch-{}'.format(epoch)
         #for train_init, train_traj in tqdm(train_loader, desc = 'Train'):
@@ -142,7 +142,6 @@ def train_vae(model, train_loader, val_loader, params):
                 expers = generate_compact_traj(ret[1], train_init, params.seq_len, trajj_type = None)
                 ret = model.loss_function(*ret, traj_mask, traj_mask_0)
                 name = ['train_expert', 'reconstruct', exp_name, str(epoch), str(eval_batch_index)]
-                
                 for k, v in ret.items():
                     v_record = v.item() if isinstance(v, torch.Tensor) else v 
                     tb_logger.add_scalar("C_eval_iter/{}".format(k), v_record, iter_num)
@@ -156,8 +155,7 @@ def train_vae(model, train_loader, val_loader, params):
         for k, v in eval_epoch_item.items():
             v_record = v / len(val_loader)
             tb_logger.add_scalar("D_eval_epoch/{}".format(k), v_record, epoch)
-                    
-                    
+                       
         if (epoch % params.val_save_ckpt != 0) or (epoch == 0):
             continue 
         state_dict = model.state_dict()

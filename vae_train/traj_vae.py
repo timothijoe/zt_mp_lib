@@ -218,7 +218,6 @@ class VaeDecoder(nn.Module):
         )
         
         self.decoder = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
-        # self.decoder_len10 = nn.LSTM(self.embedding_dim, self.h_dim, self.num_layers)
         #self.init_hidden_decoder = torch.nn.Linear(in_features = self.latent_dim, out_features = self.h_dim * self.num_layers)
         self.one_side_class_vae = one_side_class_vae
         # if self.one_side_class_vae:
@@ -404,58 +403,81 @@ class TrajVAE(nn.Module):
         traj_mask_0 = args[5]
 
         # traj_mask = traj_mask[:, :self.seq_len, :]
-        if self.seq_len == 10:
-            traj_mask = traj_mask_0
-        input = input[:, :self.seq_len, :]
+        # if self.seq_len == 10:
+        #     traj_mask = traj_mask_0
+        # input = input[:, :self.seq_len, :]
 
-
-        # epoch = 0
         # if len(args) > 4:
         #     epoch = args[4]
 
-        # self.kld_weight
-        # recon_loss = 0
         classification_loss_function =torch.nn.CrossEntropyLoss()
         # classification_loss =0
         # classification_loss = classification_loss_function(output_label, ground_truth_label) * 10
-
+        # kl divergence of gaussian
+        kld_error = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
         # reconstruction loss
-        recons_loss = F.mse_loss(recons[:,:,:2] * traj_mask[:,:,:2], input[:,:,:2]*traj_mask[:,:,:2]) * 10
-        # recons_loss + F.mse_loss(recons_len10[:,:,:2] * traj_mask_0[:,:,:2], input[:,:10,:2]*traj_mask_0[:,:,:2])
-        #recons_loss += F.mse_loss(recons[:,:,3], input[:,:,3]) * 0.01
-
-        vel_loss = F.mse_loss(recons[:,:,3]* traj_mask[:,:,3], input[:,:,3]* traj_mask[:,:,3]) * 0.01 
-        # vel_loss += F.mse_loss(recons_len10[:,:,3]* traj_mask_0[:,:,3], input[:,:10,3]* traj_mask_0[:,:,3]) * 0.01 
-
+        recons_error = F.mse_loss(recons[:,:,:2] * traj_mask[:,:,:2], input[:,:,:2]*traj_mask[:,:,:2])
+        # control error
+        control_error = F.mse_loss(recons[:,:,5]*traj_mask[:,:,2], input[:,:,5] *traj_mask[:,:,2])
         #final displacement loss
         final_displacement_error = F.mse_loss(recons[:,-1, :2]* traj_mask[:,-1, :2], input[:, -1, :2]*traj_mask[:, -1, :2])
-        # final_displacement_error += F.mse_loss(recons_len10[:,-1, :2]* traj_mask_0[:,-1, :2], input[:, 9, :2]*traj_mask_0[:, -1, :2])
+        # final theta error
+        final_theta_error = F.mse_loss(recons[:,-1,2] *traj_mask[:,-1,2], input[:,-1,2]*traj_mask[:,-1,2])
+        # other error item
+        #theta_error = F.mse_loss(recons[:,:,5]*traj_mask[:,:,2], input[:,:,5] *traj_mask[:,:,2])
+        avg_theta_error = F.mse_loss(recons[:, :, 2] *traj_mask[:, :,2], input[:, :,2]*traj_mask[:, :,2])
+        vel_error = F.mse_loss(recons[:,:,3]* traj_mask[:,:,3], input[:,:,3]* traj_mask[:,:,3])
         
-        theta_error = F.mse_loss(recons[:,:,5]*traj_mask[:,:,2], input[:,:,5] *traj_mask[:,:,2]) * 30.0 # 0.5
-        # theta_error += F.mse_loss(recons_len10[:,:,2]*traj_mask_0[:,:,2], input[:,:10,2] * np.pi / 180*traj_mask_0[:,:,2]) * 1.0 # 0.5
-
-        final_theta_error = 0.0
-        final_theta_error = F.mse_loss(recons[:,-1,2] *traj_mask[:,-1,2], input[:,-1,2]*traj_mask[:,-1,2])  * 10
-        # final_theta_error += F.mse_loss(recons_len10[:,-1,2] *traj_mask_0[:,-1,2], input[:,10,2]*traj_mask_0[:,-1,2] * np.pi / 180) * 40
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
-        #kld_weight = 0.1
-        #loss = recons_loss  + self.kld_weight * kld_loss + self.fde_weight * final_displacement_error + theta_error  + vel_loss + final_theta_error 
-        loss = self.kld_weight * kld_loss + theta_error
-        # print('kld_weight: {}'.format(kld_weight))
-        # print('epoch: {} '.format(epoch))
-        #print('final displace error: {}'.format(final_displacement_error))
-        return {'loss': loss, "reconstruction_loss": recons_loss, 'KLD': kld_loss, 'final_displacement_error' : final_displacement_error, 
-        'final_theta_error': final_theta_error,'theta_error':theta_error, 'mu':mu[0][0], 'log_var': log_var[0][0]}    
+        
+        kld_dynamic_weight = self.kld_weight * 1.0 
+        recons_dynamic_weight = 10.0  # average displacement error
+        avg_control_dynamic_error = 30.0  
+        final_displacement_dynamic_weight = self.fde_weight * 1.0 
+        final_theta_dynamic_error = 10.0 
+        avg_theta_dynamic_error = 30.0 
+        vel_dynamic_weight = 0.01 # not used in this scenario 
+        
+        kld_loss = kld_dynamic_weight * kld_error
+        avg_displacement_loss = recons_loss = recons_dynamic_weight * recons_error
+        control_loss = avg_control_dynamic_error * control_error
+        final_displacement_loss = final_displacement_dynamic_weight * final_displacement_error
+        final_theta_loss = final_theta_dynamic_error * final_theta_error 
+        avg_theta_loss = avg_theta_dynamic_error * avg_theta_error
+        vel_loss = vel_dynamic_weight * vel_error 
+        
+        #loss = kld_loss + avg_displacement_loss + control_loss + final_displacement_loss + final_theta_loss + avg_theta_loss + vel_loss
+        loss = kld_loss + control_loss
+        
+        
+        return_item =  {
+            'loss': loss,
+            'a_loss': loss,  # equal to loss, just for better visual in tensorboard
+            'b_kld_loss': kld_loss,
+            'c_reconstrunction_loss': recons_loss, 
+            'd_control_loss': control_loss, 
+            'e_final_displacement_loss': final_displacement_loss,
+            'f_final_theta_loss': final_theta_loss,
+            'g_avg_theta_loss': avg_theta_loss,
+            'h_vel_loss': vel_loss,
+            'za_b_kld_error': kld_error, 'zb_b_kld_dynamic_weight': kld_dynamic_weight,
+            'za_c_recons_error': recons_error, 'zb_c_recons_dynamic_weight': recons_dynamic_weight,
+            'za_d_control_error': control_error , 'zb_d_avg_control_dynamic_error': avg_control_dynamic_error,
+            'za_e_final_displacement_error': final_displacement_error , 'zb_e_final_displacement_dynamic_weight': final_displacement_dynamic_weight,
+            'za_f_final_theta_error': final_theta_error , 'zb_f_final_theta_dynamic_error': final_theta_dynamic_error,
+            'za_g_avg_theta_error': avg_theta_error , 'zb_g_avg_theta_dynamic_error': avg_theta_dynamic_error,
+            'za_h_vel_error': vel_error , 'zb_h_vel_dynamic_weight': vel_dynamic_weight,
+            'i_mu':mu.mean(), 'i_log_var': log_var.mean(),
+        }
+        return return_item
+        
+        # return {'loss': loss, "reconstruction_loss": recons_loss, 'KLD': kld_loss, 'final_displacement_error' : final_displacement_error, 
+        # 'final_theta_error': final_theta_error,'theta_error':theta_error, 'mu':mu.mean(), 'log_var': log_var.mean()}    
 
     def sample(self, batch_z, init_state):
         with torch.no_grad():
             samples = self.vae_decoder(batch_z, init_state)
         return samples
 
-    # def sample(self, batch_z, init_state):
-    #     with torch.no_grad():
-    #         samples,samples_len10, output_labels = self.vae_decoder(batch_z, init_state)
-    #     return samples, samples_len10, output_labels
 def create_model(params):
     
     torch.manual_seed(params.seed)
