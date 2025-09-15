@@ -364,17 +364,17 @@ class TrajVAE(nn.Module):
             one_side_class_vae = self.one_side_class_vae
         )
 
-    def reparameterize(self, mu, logvar):
+    def reparameterize(self, mu, logvar, noise_scale = 0.1):
         # mu shape: batch size x latent_dim
         # sigma shape: batch_size x latent_dim
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std) * 0.1
+        eps = torch.randn_like(std) * noise_scale
         return eps * std + mu
         #return mu
     
-    def forward(self, expert_traj, init_state, traj_label = None):
+    def forward(self, expert_traj, init_state, traj_label = None, noise_scale = 0.1):
         mu, log_var = self.vae_encoder(expert_traj, traj_label)
-        z = self.reparameterize(mu, log_var)
+        z = self.reparameterize(mu, log_var, noise_scale)
         #z = mu
         z = torch.tanh(z)
         # z = z / 2
@@ -407,10 +407,11 @@ class TrajVAE(nn.Module):
         #     traj_mask = traj_mask_0
         # input = input[:, :self.seq_len, :]
 
-        # if len(args) > 4:
-        #     epoch = args[4]
+        if len(args) > 6:
+            epoch = args[6]
 
         classification_loss_function =torch.nn.CrossEntropyLoss()
+        l1_loss = torch.nn.L1Loss()
         # classification_loss =0
         # classification_loss = classification_loss_function(output_label, ground_truth_label) * 10
         # kl divergence of gaussian
@@ -420,7 +421,8 @@ class TrajVAE(nn.Module):
         # control error
         control_error = F.mse_loss(recons[:,:,5]*traj_mask[:,:,2], input[:,:,5] *traj_mask[:,:,2])
         #final displacement loss
-        final_displacement_error = F.mse_loss(recons[:,-1, :2]* traj_mask[:,-1, :2], input[:, -1, :2]*traj_mask[:, -1, :2])
+        #final_displacement_error = F.mse_loss(recons[:,-1, :2]* traj_mask[:,-1, :2], input[:, -1, :2]*traj_mask[:, -1, :2])
+        final_displacement_error = l1_loss(recons[:,-1, :2]* traj_mask[:,-1, :2], input[:, -1, :2]*traj_mask[:, -1, :2])
         # final theta error
         final_theta_error = F.mse_loss(recons[:,-1,2] *traj_mask[:,-1,2], input[:,-1,2]*traj_mask[:,-1,2])
         # other error item
@@ -430,9 +432,9 @@ class TrajVAE(nn.Module):
         
         
         kld_dynamic_weight = self.kld_weight * 1.0 
-        recons_dynamic_weight = 10.0  # average displacement error
+        recons_dynamic_weight = 10.0 * 3  # average displacement error
         avg_control_dynamic_error = 30.0  
-        final_displacement_dynamic_weight = self.fde_weight * 1.0 
+        final_displacement_dynamic_weight = self.fde_weight * 10.0  # 1.0
         final_theta_dynamic_error = 10.0 
         avg_theta_dynamic_error = 30.0 
         vel_dynamic_weight = 0.01 # not used in this scenario 
@@ -447,7 +449,10 @@ class TrajVAE(nn.Module):
         
         #loss = kld_loss + avg_displacement_loss + control_loss + final_displacement_loss + final_theta_loss + avg_theta_loss + vel_loss
         loss = kld_loss + control_loss
-        
+        if epoch > 80:
+            loss += recons_loss
+        if epoch > 100:
+            loss += final_displacement_loss + avg_theta_loss
         
         return_item =  {
             'loss': loss,

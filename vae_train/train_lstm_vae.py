@@ -16,6 +16,8 @@ import matplotlib.gridspec as gridspec
 from tensorboardX import SummaryWriter
 from vis_helper import save_traj_to_img, generate_compact_traj, save_trajs_to_img_batch
 import os 
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
 def save_model(model):
     # model_PATH = "result/{}/model/model_{}.pt".format(params.model_name, (epoch+params.restore_epoch))
     model_PATH = "zt_model1.pt"
@@ -48,7 +50,7 @@ def main():
     parser.add_argument('--visualize_data_distribution', type=bool, default=False)
     parser.add_argument('--restore_model', type=bool, default=False)
     parser.add_argument('--restore_epoch', type=int, default=0)
-    parser.add_argument('--n_epochs', type=int, default=100)
+    parser.add_argument('--n_epochs', type=int, default=150) # 100
     args = parser.parse_args()
     params = hyper_parameter(args)
     mk_logdir(params)
@@ -79,6 +81,8 @@ def train_vae(model, train_loader, val_loader, params):
     tb_logger = SummaryWriter('result/{}/log/'.format(exp_name))
     #optimizer = optim.Adam(model.parameters(), lr=params.learning_rate, weight_decay = params.adam_weight_decay)
     optimizer = optim.Adam(model.parameters(), lr=params.learning_rate)
+    scheduler = CosineAnnealingLR(optimizer, T_max=40, eta_min=1e-5)
+    noise_scale = 0.1
     iter_num = 0
     current_epoch = -1
     for epoch in range(params.n_epochs + 1):
@@ -92,13 +96,13 @@ def train_vae(model, train_loader, val_loader, params):
             traj_mask = traj_mask.float().to(params.device)
             traj_mask_0 = traj_mask_0.float().to(params.device)
             traj_type = traj_type.float().to(params.device)
-            ret = model.forward(train_traj, train_init, traj_type)
+            ret = model.forward(train_traj, train_init, traj_type, noise_scale)
 
             recons = generate_compact_traj(ret[0], train_init, params.seq_len, trajj_type = traj_type)
             expers = generate_compact_traj(ret[1], train_init, params.seq_len, trajj_type = None)
             name = ['train_expert', 'reconstruct', exp_name, str(epoch)]
 
-            ret = model.loss_function(*ret, traj_mask, traj_mask_0)
+            ret = model.loss_function(*ret, traj_mask, traj_mask_0, epoch)
             loss = ret['loss']
             optimizer.zero_grad()
             loss.backward()
@@ -114,15 +118,12 @@ def train_vae(model, train_loader, val_loader, params):
         for k, v in train_epoch_item.items():
             v_record = v / len(train_loader)
             tb_logger.add_scalar("B_train_epoch/{}".format(k), v_record, epoch)
-
-            # if epoch != current_epoch:
-            #     current_epoch = epoch
-            #     for k, v in ret.items():
-            #         tb_logger.add_scalar("train_epoch/{}".format(k), v.item(), epoch)
-            #     img_to_tensorboard = save_trajs_to_img_batch(name, expers, recons)
-            #     #tb_logger.add_image('train_epoch/train_recon_comprare', img_to_tensorboard, epoch, dataformats='HWC')
-            # iter_num += 1
-        # if epoch > 0 and epoch % params.val_freq == 0:
+            
+        if (epoch > 50 and epoch < 100):
+            scheduler.step()
+            noise_scale = min(0.1 - epoch / 1250, 0.1)
+            noise_scale = max(0.001, noise_scale)
+        
         if epoch % params.val_freq != 0:
             continue 
         # starting evaluate
@@ -136,11 +137,11 @@ def train_vae(model, train_loader, val_loader, params):
                 traj_mask = traj_mask.float().to(params.device)
                 traj_mask_0 = traj_mask_0.float().to(params.device)
                 traj_type = traj_type.float().to(params.device)
-                ret = model.forward(val_traj, val_init, traj_type)
+                ret = model.forward(val_traj, val_init, traj_type, noise_scale)
                 
                 recons = generate_compact_traj(ret[0], train_init, params.seq_len, trajj_type = traj_type)
                 expers = generate_compact_traj(ret[1], train_init, params.seq_len, trajj_type = None)
-                ret = model.loss_function(*ret, traj_mask, traj_mask_0)
+                ret = model.loss_function(*ret, traj_mask, traj_mask_0, epoch)
                 name = ['train_expert', 'reconstruct', exp_name, str(epoch), str(eval_batch_index)]
                 for k, v in ret.items():
                     v_record = v.item() if isinstance(v, torch.Tensor) else v 
