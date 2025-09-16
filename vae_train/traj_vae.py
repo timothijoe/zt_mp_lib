@@ -64,6 +64,7 @@ class VaeEncoder(nn.Module):
         seq_len = 30,
         use_relative_pos = True,
         dt = 0.03,
+        device = 'cuda',
         ):
         super(VaeEncoder, self).__init__()
         self.encoding_len = seq_len
@@ -75,7 +76,8 @@ class VaeEncoder(nn.Module):
         self.seq_len = seq_len 
         self.use_relative_pos = use_relative_pos
         self.dt = dt
-        self.device = torch.device('cuda:0')
+        #self.device = torch.device('cuda:0')
+        self.device = device
 
         self.init_traj_ele_embedding()
         # input: x, y, theta, v,   output: embedding
@@ -176,7 +178,7 @@ class VaeEncoder(nn.Module):
         #mu, log_var = torch.tanh(mu), torch.tanh(log_var)
         return mu, log_var
 
-    def forward(self, input, traj_label):
+    def forward(self, input, traj_label = None):
         return self.encode(input, traj_label)
 
 
@@ -189,6 +191,7 @@ class VaeDecoder(nn.Module):
         use_relative_pos = True,
         dt = 0.03,
         one_side_class_vae = False, #if true, we will use conditional vae, plus one dim of latent_dim
+        device = 'cuda',
         ):
         super(VaeDecoder, self).__init__()
         self.embedding_dim = embedding_dim
@@ -334,6 +337,7 @@ class TrajVAE(nn.Module):
         kld_weight = 0.01, 
         fde_weight = 5.0,
         one_side_class_vae = True,
+        device = 'cuda',
         ):
         super(TrajVAE, self).__init__()
         self.embedding_dim = embedding_dim
@@ -352,7 +356,8 @@ class TrajVAE(nn.Module):
             latent_dim = self.latent_dim,
             seq_len = self.seq_len,
             use_relative_pos = self.use_relative_pos,
-            dt = self.dt
+            dt = self.dt,
+            device = device
         )
         self.vae_decoder = VaeDecoder(
             embedding_dim = self.embedding_dim,
@@ -361,7 +366,8 @@ class TrajVAE(nn.Module):
             seq_len = self.seq_len,
             use_relative_pos = self.use_relative_pos,
             dt = self.dt,
-            one_side_class_vae = self.one_side_class_vae
+            one_side_class_vae = self.one_side_class_vae,
+            device = device
         )
 
     def reparameterize(self, mu, logvar, noise_scale = 0.1):
@@ -496,6 +502,7 @@ def create_model(params):
         fde_weight = params.fde_weight,
         kld_weight = params.kld_weight,
         one_side_class_vae=params.one_side_class_vae,
+        device = params.device
     )
     
     model = model.float()

@@ -45,9 +45,9 @@
 
       const slider = document.createElement('input');
       slider.type = 'range';
-      slider.min = -3;
-      slider.max = 3;
-      slider.step = 0.1;
+      slider.min = -1;
+      slider.max = 1;
+      slider.step = 0.01;
       slider.value = 0;
       slider.dataset.index = i;
 
@@ -67,7 +67,7 @@
     // 向后端发送隐状态并获取轨迹
     async function updateTrajectory() {
       try {
-        const response = await fetch('/generate', {
+        const response = await fetch('http://127.0.0.1:5000/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ latent_vector: latentVector })
@@ -90,11 +90,13 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空画布
       ctx.beginPath();
 
-      trajectory.forEach((point, index) => {
-        const x = (index / trajectory.length) * canvas.width; // 横坐标
-        const y = canvas.height - point * canvas.height; // 纵坐标
-        if (index === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      trajectory.forEach(([x,y], index) => {
+        const mappedX = x / 12.0 * canvas.width;
+        const mappedY = y / 12.0 * canvas.height + 0.5 * canvas.height;
+        //const x = (index / trajectory.length) * canvas.width; // 横坐标
+        //const y = canvas.height - point * canvas.height; // 纵坐标
+        if (index === 0) ctx.moveTo(mappedX, mappedY);
+        else ctx.lineTo(mappedX, mappedY);
       });
 
       ctx.stroke();
