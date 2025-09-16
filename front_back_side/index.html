@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VAE Latent State Visualization</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid black;
+      margin-top: 20px;
+    }
+    .slider-container {
+      margin: 10px;
+    }
+    .slider-container label {
+      display: block;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>VAE Latent State Visualization</h1>
+  <div id="sliders"></div>
+  <canvas id="trajectoryCanvas" width="400" height="400"></canvas>
+
+  <script>
+    const latentDim = 5; // 隐状态维度
+    const sliders = document.getElementById('sliders');
+    const canvas = document.getElementById('trajectoryCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let latentVector = Array(latentDim).fill(0); // 初始化隐状态向量
+
+    // 创建滑块
+    for (let i = 0; i < latentDim; i++) {
+      const container = document.createElement('div');
+      container.className = 'slider-container';
+
+      const label = document.createElement('label');
+      label.textContent = `z${i + 1}: 0`;
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = -3;
+      slider.max = 3;
+      slider.step = 0.1;
+      slider.value = 0;
+      slider.dataset.index = i;
+
+      slider.addEventListener('input', (event) => {
+        const index = event.target.dataset.index;
+        const value = parseFloat(event.target.value);
+        latentVector[index] = value;
+        label.textContent = `z${index + 1}: ${value}`;
+        updateTrajectory(); // 每次滑块移动时更新轨迹
+      });
+
+      container.appendChild(label);
+      container.appendChild(slider);
+      sliders.appendChild(container);
+    }
+
+    // 向后端发送隐状态并获取轨迹
+    async function updateTrajectory() {
+      try {
+        const response = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latent_vector: latentVector })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          console.error(data.error);
+          return;
+        }
+        const trajectory = data.trajectory;
+        drawTrajectory(trajectory);
+      } catch (error) {
+        console.error('Error fetching trajectory:', error);
+      }
+    }
+
+    // 绘制轨迹
+    function drawTrajectory(trajectory) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // 清空画布
+      ctx.beginPath();
+
+      trajectory.forEach((point, index) => {
+        const x = (index / trajectory.length) * canvas.width; // 横坐标
+        const y = canvas.height - point * canvas.height; // 纵坐标
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+
+      ctx.stroke();
+    }
+
+    // 初始化，绘制初始轨迹
+    updateTrajectory();
+  </script>
+</body>
+</html>
